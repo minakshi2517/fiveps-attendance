@@ -55,15 +55,26 @@ export default function WebcamCapture({ onCapture, isProcessing, detectionData }
 
     // Periodic face recognition
     useEffect(() => {
-        if (!modelsLoaded || !hasPermission) return;
+        if (!modelsLoaded || !hasPermission) {
+            console.log('[Recognition] Not starting - modelsLoaded:', modelsLoaded, 'hasPermission:', hasPermission);
+            return;
+        }
+
+        console.log('[Recognition] Starting periodic face recognition with API:', import.meta.env.VITE_API_URL || 'http://localhost:8000');
 
         const recognizeFace = async () => {
             const video = webcamRef.current?.video;
-            if (!video || video.readyState !== 4) return;
+            if (!video || video.readyState !== 4) {
+                console.log('[Recognition] Video not ready');
+                return;
+            }
 
             try {
                 const imageSrc = webcamRef.current?.getScreenshot();
-                if (!imageSrc) return;
+                if (!imageSrc) {
+                    console.log('[Recognition] No screenshot available');
+                    return;
+                }
 
                 const response = await fetch(imageSrc);
                 const blob = await response.blob();
@@ -74,14 +85,21 @@ export default function WebcamCapture({ onCapture, isProcessing, detectionData }
                 formData.append('longitude', '75.708');
 
                 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+                console.log('[Recognition] Calling API:', `${API_URL}/api/attendance/recognize`);
+
                 const result = await fetch(`${API_URL}/api/attendance/recognize`, {
                     method: 'POST',
                     body: formData,
                 });
 
+                console.log('[Recognition] Response status:', result.status);
+
                 if (result.ok) {
                     const data = await result.json();
+                    console.log('[Recognition] Response data:', data);
+
                     if (data.success && data.student) {
+                        console.log('[Recognition] Student recognized:', data.student.name);
                         setRecognizedStudent({
                             name: data.student.name,
                             uid: data.student.enrollment_id,
@@ -93,6 +111,7 @@ export default function WebcamCapture({ onCapture, isProcessing, detectionData }
                     } else if (data.message === "No face detected") {
                         setRecognizedStudent(null);
                     } else {
+                        console.log('[Recognition] Not recognized:', data.message);
                         setRecognizedStudent(null);
                         if (!unknownStartTimeRef.current) {
                             unknownStartTimeRef.current = Date.now();
@@ -101,9 +120,11 @@ export default function WebcamCapture({ onCapture, isProcessing, detectionData }
                             setIsUnknown(true);
                         }
                     }
+                } else {
+                    console.error('[Recognition] API error:', result.status, result.statusText);
                 }
             } catch (error) {
-                // Silently handle error
+                console.error('[Recognition] Exception:', error);
             }
         };
 

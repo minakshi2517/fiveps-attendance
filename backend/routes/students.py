@@ -221,6 +221,40 @@ async def search_students(
     students = result.scalars().all()
     return students
 
+@router.delete("/all")
+async def delete_all_students(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Delete all students and their associated data.
+    """
+    import os
+    from pathlib import Path
+    
+    # Get all students first to delete their files
+    result = await db.execute(select(Student))
+    students = result.scalars().all()
+    
+    for student in students:
+        # Delete associated files
+        if student.face_encoding_path and os.path.exists(student.face_encoding_path):
+            os.remove(student.face_encoding_path)
+        
+        if student.profile_image_path and os.path.exists(student.profile_image_path):
+            os.remove(student.profile_image_path)
+        
+        # Delete individual encoding files
+        if student.face_encoding_paths:
+            for path in student.face_encoding_paths.split(';'):
+                if path and os.path.exists(path):
+                    os.remove(path)
+        
+        await db.delete(student)
+    
+    await db.commit()
+    
+    return {"message": f"Successfully deleted {len(students)} students"}
+
 @router.delete("/{student_id}")
 async def delete_student(
     student_id: int,
@@ -251,3 +285,4 @@ async def delete_student(
     await db.commit()
     
     return {"message": "Student deleted successfully"}
+
