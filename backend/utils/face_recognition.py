@@ -224,22 +224,42 @@ def detect_face_in_image(image_data: bytes) -> bool:
         True if face detected, False otherwise
     """
     try:
+        print(f"[DEBUG] detect_face_in_image: Received {len(image_data)} bytes")
+        
         nparr = np.frombuffer(image_data, np.uint8)
+        print(f"[DEBUG] detect_face_in_image: Created numpy array, shape: {nparr.shape}, dtype: {nparr.dtype}")
+        
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if image is None:
-            print("[ERROR] detect_face_in_image: Failed to decode image")
-            return False
+            print("[ERROR] detect_face_in_image: cv2.imdecode returned None")
+            # Try alternative decoding method
+            try:
+                from PIL import Image as PILImage
+                import io
+                pil_image = PILImage.open(io.BytesIO(image_data))
+                print(f"[DEBUG] PIL opened image: mode={pil_image.mode}, size={pil_image.size}")
+                # Convert PIL to numpy
+                image = np.array(pil_image)
+                print(f"[DEBUG] PIL to numpy: shape={image.shape}, dtype={image.dtype}")
+            except Exception as pil_error:
+                print(f"[ERROR] PIL also failed: {pil_error}")
+                return False
+        else:
+            print(f"[DEBUG] detect_face_in_image: cv2.imdecode succeeded, shape: {image.shape}, dtype: {image.dtype}")
         
-        # Handle different image formats (same as generate_face_encoding)
+        # Handle different image formats
         if len(image.shape) == 2:
             # Grayscale
+            print("[DEBUG] detect_face_in_image: Converting grayscale to RGB")
             rgb_image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
         elif image.shape[2] == 4:
             # RGBA
+            print("[DEBUG] detect_face_in_image: Converting RGBA to RGB")
             rgb_image = cv2.cvtColor(image, cv2.COLOR_BGRA2RGB)
         elif image.shape[2] == 3:
-            # BGR
+            # BGR or RGB
+            print("[DEBUG] detect_face_in_image: Converting BGR to RGB")
             rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         else:
             print(f"[ERROR] detect_face_in_image: Unexpected image format with {image.shape[2]} channels")
@@ -247,9 +267,18 @@ def detect_face_in_image(image_data: bytes) -> bool:
         
         # Ensure 8-bit
         if rgb_image.dtype != np.uint8:
+            print(f"[DEBUG] detect_face_in_image: Converting from {rgb_image.dtype} to uint8")
             rgb_image = rgb_image.astype(np.uint8)
         
+        # Ensure contiguous array (dlib requirement)
+        if not rgb_image.flags['C_CONTIGUOUS']:
+            print("[DEBUG] detect_face_in_image: Making array contiguous")
+            rgb_image = np.ascontiguousarray(rgb_image)
+        
+        print(f"[DEBUG] detect_face_in_image: Final image - shape: {rgb_image.shape}, dtype: {rgb_image.dtype}, contiguous: {rgb_image.flags['C_CONTIGUOUS']}")
+        
         face_locations = face_recognition.face_locations(rgb_image)
+        print(f"[DEBUG] detect_face_in_image: Found {len(face_locations)} faces")
         return len(face_locations) > 0
         
     except Exception as e:
