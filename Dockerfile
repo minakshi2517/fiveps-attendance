@@ -1,28 +1,23 @@
 # Use a base image with dlib and face_recognition pre-installed
-# This avoids the memory-intensive compilation step that fails on Hugging Face
 FROM animcogn/face_recognition:cpu
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies for OpenCV (libgl1)
+# Install system dependencies for OpenCV (headless needs fewer, but good to have basics)
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip (good practice)
+# Upgrade pip
 RUN pip install --no-cache-dir --upgrade pip
 
-# Copy backend requirements
-COPY backend/requirements.txt requirements.txt
+# Copy Optimized HF requirements
+COPY backend/requirements_hf.txt requirements.txt
 
-# Filter out face-recognition from requirements.txt because it's already in the base image
-# This prevents pip from trying to compile/reinstall it
-RUN grep -v "face-recognition" requirements.txt > requirements_final.txt
-
-# Install remaining dependencies from filtered requirements
-RUN pip install --no-cache-dir -r requirements_final.txt
+# Install dependencies (No face-recognition or dlib here, they are in base)
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the entire backend code
 COPY backend/ .
