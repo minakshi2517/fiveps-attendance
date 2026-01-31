@@ -1,40 +1,38 @@
-FROM python:3.10-slim-bullseye
-
-# Install system dependencies for dlib and face_recognition
-# Optimized: removed GUI libs, added --no-install-recommends, and clean steps
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    cmake \
-    libopenblas-dev \
-    liblapack-dev \
-    libboost-python-dev \
-    curl \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Hugging Face Spaces runs as user 1000
-RUN useradd -m -u 1000 user
-USER user
-ENV PATH="/home/user/.local/bin:$PATH"
+# Use Python 3.10
+FROM python:3.10-slim
 
 # Set working directory
 WORKDIR /app
 
-# Copy requirements first for better caching
-COPY --chown=user backend/requirements.txt ./requirements.txt
+# Install system dependencies for dlib and opencv
+RUN apt-get update && apt-get install -y \
+    cmake \
+    build-essential \
+    libopenblas-dev \
+    liblapack-dev \
+    libx11-dev \
+    libgtk-3-dev \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy backend requirements first (for caching)
+COPY backend/requirements.txt requirements.txt
 
 # Install Python dependencies
-# Optimized: Added --no-cache-dir
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# Pre-install cmake/numpy to help dlib build
+RUN pip install --no-cache-dir cmake numpy
 
-# Copy backend code
-COPY --chown=user backend/ .
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Create data directories with correct permissions
-RUN mkdir -p data/face_encodings data/profile_images data/attendance_snapshots
+# Copy the entire backend code
+COPY backend/ .
 
-# HF Spaces expects port 7860
+# Create necessary directories for persistence
+RUN mkdir -p data/faces data/attendance_snapshots
+
+# Expose port 7860 (Hugging Face default)
 EXPOSE 7860
 
 # Run the application
