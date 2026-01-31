@@ -24,41 +24,21 @@ def generate_face_encoding(image_data: bytes, num_jitters: int = 1) -> Optional[
     try:
         print(f"[DEBUG] Attempting to decode image, size: {len(image_data)} bytes")
         
-        # Convert bytes to numpy array
-        nparr = np.frombuffer(image_data, np.uint8)
-        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        # Use PIL instead of OpenCV - PIL creates native RGB arrays that dlib accepts
+        from PIL import Image as PILImage
+        import io
         
-        if image is None:
-            print("[ERROR] Failed to decode image with cv2.imdecode")
-            return None
+        pil_image = PILImage.open(io.BytesIO(image_data))
+        print(f"[DEBUG] PIL opened image: mode={pil_image.mode}, size={pil_image.size}")
         
-        print(f"[DEBUG] Image decoded successfully, shape: {image.shape}, dtype: {image.dtype}")
+        # Convert to RGB if needed
+        if pil_image.mode != 'RGB':
+            print(f"[DEBUG] Converting from {pil_image.mode} to RGB")
+            pil_image = pil_image.convert('RGB')
         
-        # Ensure image is in the correct format (8-bit RGB)
-        # cv2.imdecode with IMREAD_COLOR returns BGR
-        # Use array slicing instead of cv2.cvtColor for better dlib compatibility
-        if len(image.shape) == 2:
-            # Grayscale image - convert to RGB by stacking
-            print("[DEBUG] Converting grayscale to RGB")
-            rgb_image = np.stack([image, image, image], axis=2)
-        elif image.shape[2] == 4:
-            # BGRA image - remove alpha and reverse to RGB
-            print("[DEBUG] Converting BGRA to RGB")
-            rgb_image = image[:, :, 2::-1]  # Reverse BGR to RGB, drop alpha
-        elif image.shape[2] == 3:
-            # BGR image - reverse to RGB using array slicing
-            print("[DEBUG] Converting BGR to RGB using array slicing")
-            rgb_image = image[:, :, ::-1].copy()  # Reverse and copy to ensure contiguous
-        else:
-            print(f"[ERROR] Unexpected image format with {image.shape[2]} channels")
-            return None
-        
-        # Ensure the image is 8-bit
-        if rgb_image.dtype != np.uint8:
-            print(f"[DEBUG] Converting image from {rgb_image.dtype} to uint8")
-            rgb_image = rgb_image.astype(np.uint8)
-        
-        print(f"[DEBUG] Final RGB image shape: {rgb_image.shape}, dtype: {rgb_image.dtype}")
+        # Convert to numpy array - PIL images are already in RGB format
+        rgb_image = np.array(pil_image, dtype=np.uint8)
+        print(f"[DEBUG] PIL to numpy: shape={rgb_image.shape}, dtype={rgb_image.dtype}")
         
         print("[DEBUG] Attempting face detection...")
         # Detect face locations - try with both HOG (default) and CNN models
@@ -227,61 +207,28 @@ def detect_face_in_image(image_data: bytes) -> bool:
     try:
         print(f"[DEBUG] detect_face_in_image: Received {len(image_data)} bytes")
         
-        nparr = np.frombuffer(image_data, np.uint8)
-        print(f"[DEBUG] detect_face_in_image: Created numpy array, shape: {nparr.shape}, dtype: {nparr.dtype}")
+        # Use PIL instead of OpenCV - PIL creates native RGB arrays that dlib accepts
+        from PIL import Image as PILImage
+        import io
         
-        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        pil_image = PILImage.open(io.BytesIO(image_data))
+        print(f"[DEBUG] PIL opened image: mode={pil_image.mode}, size={pil_image.size}")
         
-        if image is None:
-            print("[ERROR] detect_face_in_image: cv2.imdecode returned None")
-            # Try alternative decoding method
-            try:
-                from PIL import Image as PILImage
-                import io
-                pil_image = PILImage.open(io.BytesIO(image_data))
-                print(f"[DEBUG] PIL opened image: mode={pil_image.mode}, size={pil_image.size}")
-                # Convert PIL to numpy - PIL images are already in RGB
-                if pil_image.mode == 'RGBA':
-                    pil_image = pil_image.convert('RGB')
-                elif pil_image.mode == 'L':
-                    pil_image = pil_image.convert('RGB')
-                rgb_image = np.array(pil_image, dtype=np.uint8)
-                print(f"[DEBUG] PIL to numpy: shape={rgb_image.shape}, dtype={rgb_image.dtype}")
-            except Exception as pil_error:
-                print(f"[ERROR] PIL also failed: {pil_error}")
-                return False
-        else:
-            print(f"[DEBUG] detect_face_in_image: cv2.imdecode succeeded, shape: {image.shape}, dtype: {image.dtype}")
-            
-            # cv2.imdecode returns BGR format
-            # Convert BGR to RGB using array slicing (more reliable for dlib than cv2.cvtColor)
-            if len(image.shape) == 2:
-                # Grayscale - convert to RGB by stacking
-                print("[DEBUG] detect_face_in_image: Converting grayscale to RGB")
-                rgb_image = np.stack([image, image, image], axis=2)
-            elif image.shape[2] == 4:
-                # BGRA - remove alpha and reverse to RGB
-                print("[DEBUG] detect_face_in_image: Converting BGRA to RGB")
-                rgb_image = image[:, :, 2::-1]  # Reverse BGR to RGB, drop alpha
-            elif image.shape[2] == 3:
-                # BGR - reverse to RGB using array slicing
-                print("[DEBUG] detect_face_in_image: Converting BGR to RGB using array slicing")
-                rgb_image = image[:, :, ::-1].copy()  # Reverse and copy to ensure contiguous
-            else:
-                print(f"[ERROR] detect_face_in_image: Unexpected image format with {image.shape[2]} channels")
-                return False
+        # Convert to RGB if needed
+        if pil_image.mode != 'RGB':
+            print(f"[DEBUG] Converting from {pil_image.mode} to RGB")
+            pil_image = pil_image.convert('RGB')
         
-        # Ensure 8-bit
-        if rgb_image.dtype != np.uint8:
-            print(f"[DEBUG] detect_face_in_image: Converting from {rgb_image.dtype} to uint8")
-            rgb_image = rgb_image.astype(np.uint8)
+        # Convert to numpy array - PIL images are already in RGB format
+        rgb_image = np.array(pil_image, dtype=np.uint8)
+        print(f"[DEBUG] PIL to numpy: shape={rgb_image.shape}, dtype={rgb_image.dtype}, contiguous={rgb_image.flags['C_CONTIGUOUS']}")
         
-        # Ensure contiguous array (dlib requirement)
-        if not rgb_image.flags['C_CONTIGUOUS']:
-            print("[DEBUG] detect_face_in_image: Making array contiguous")
-            rgb_image = np.ascontiguousarray(rgb_image)
+        # Verify it's the right format
+        if len(rgb_image.shape) != 3 or rgb_image.shape[2] != 3:
+            print(f"[ERROR] Unexpected shape after PIL conversion: {rgb_image.shape}")
+            return False
         
-        print(f"[DEBUG] detect_face_in_image: Final image - shape: {rgb_image.shape}, dtype: {rgb_image.dtype}, contiguous: {rgb_image.flags['C_CONTIGUOUS']}")
+        print(f"[DEBUG] Final image ready for dlib - shape: {rgb_image.shape}, dtype: {rgb_image.dtype}")
         
         face_locations = face_recognition.face_locations(rgb_image)
         print(f"[DEBUG] detect_face_in_image: Found {len(face_locations)} faces")
@@ -304,25 +251,18 @@ def detect_face_with_box(image_data: bytes) -> Optional[Tuple[np.ndarray, Tuple[
         Tuple of (face_encoding, (top, right, bottom, left)) or None if no face
     """
     try:
-        nparr = np.frombuffer(image_data, np.uint8)
-        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        # Use PIL instead of OpenCV - PIL creates native RGB arrays that dlib accepts
+        from PIL import Image as PILImage
+        import io
         
-        if image is None:
-            return None
+        pil_image = PILImage.open(io.BytesIO(image_data))
         
-        # Handle different image formats using array slicing for dlib compatibility
-        if len(image.shape) == 2:
-            rgb_image = np.stack([image, image, image], axis=2)
-        elif image.shape[2] == 4:
-            rgb_image = image[:, :, 2::-1]  # Reverse BGR to RGB, drop alpha
-        elif image.shape[2] == 3:
-            rgb_image = image[:, :, ::-1].copy()  # Reverse and copy to ensure contiguous
-        else:
-            return None
+        # Convert to RGB if needed
+        if pil_image.mode != 'RGB':
+            pil_image = pil_image.convert('RGB')
         
-        # Ensure 8-bit
-        if rgb_image.dtype != np.uint8:
-            rgb_image = rgb_image.astype(np.uint8)
+        # Convert to numpy array - PIL images are already in RGB format
+        rgb_image = np.array(pil_image, dtype=np.uint8)
         
         # Detect face locations
         face_locations = face_recognition.face_locations(rgb_image)
