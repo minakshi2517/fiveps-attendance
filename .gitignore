@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Face data (sensitive)
+backend/data/faces/*
+!backend/data/faces/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp
+
+# Coverage
+coverage/
+.nyc_output/
