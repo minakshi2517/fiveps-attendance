@@ -24,53 +24,77 @@ def generate_face_encoding(image_data: bytes, num_jitters: int = 1) -> Optional[
     try:
         print(f"[DEBUG] Attempting to decode image, size: {len(image_data)} bytes")
         
-        # Use face_recognition's official image loading method
+        # Use PIL to load the image
+        from PIL import Image as PILImage
         import io
-        image_file = io.BytesIO(image_data)
         
+        pil_image = PILImage.open(io.BytesIO(image_data))
+        print(f"[DEBUG] PIL opened image: mode={pil_image.mode}, size={pil_image.size}")
+        
+        # Convert to RGB if needed
+        if pil_image.mode != 'RGB':
+            pil_image = pil_image.convert('RGB')
+        
+        # Convert to numpy array
+        rgb_image = np.array(pil_image, dtype=np.uint8)
+        print(f"[DEBUG] Image array: shape={rgb_image.shape}, dtype={rgb_image.dtype}")
+        
+        # Step 1: Detect face using MediaPipe (more reliable)
+        face_location = None
         try:
-            rgb_image = face_recognition.load_image_file(image_file)
-            print(f"[DEBUG] face_recognition.load_image_file succeeded: shape={rgb_image.shape}, dtype={rgb_image.dtype}")
-        except Exception as load_error:
-            print(f"[ERROR] face_recognition.load_image_file failed: {load_error}")
-            from PIL import Image as PILImage
-            image_file.seek(0)
-            pil_image = PILImage.open(image_file)
-            if pil_image.mode != 'RGB':
-                pil_image = pil_image.convert('RGB')
-            rgb_image = np.asarray(pil_image, dtype=np.uint8, order='C')
-            if not rgb_image.flags['C_CONTIGUOUS']:
-                rgb_image = np.ascontiguousarray(rgb_image, dtype=np.uint8)
-        
-        print("[DEBUG] Attempting face detection...")
-        # Detect face locations - try with both HOG (default) and CNN models
-        try:
-            face_locations = face_recognition.face_locations(rgb_image, model="hog")
-            print(f"[DEBUG] HOG face detection found {len(face_locations)} faces")
-        except Exception as hog_error:
-            print(f"[WARNING] HOG detection failed: {hog_error}, trying CNN...")
-            try:
-                face_locations = face_recognition.face_locations(rgb_image, model="cnn")
-                print(f"[DEBUG] CNN face detection found {len(face_locations)} faces")
-            except Exception as cnn_error:
-                print(f"[ERROR] CNN detection also failed: {cnn_error}")
-                return None
-        
-        if not face_locations:
-            print("[WARNING] No face locations detected in image")
+            import mediapipe as mp
+            mp_face_detection = mp.solutions.face_detection
+            
+            with mp_face_detection.FaceDetection(
+                model_selection=1,
+                min_detection_confidence=0.5
+            ) as face_detection:
+                results = face_detection.process(rgb_image)
+                
+                if results.detections and len(results.detections) > 0:
+                    # Get first detection
+                    detection = results.detections[0]
+                    bboxC = detection.location_data.relative_bounding_box
+                    ih, iw = rgb_image.shape[:2]
+                    
+                    # Convert to (top, right, bottom, left) format for face_recognition
+                    x = int(bboxC.xmin * iw)
+                    y = int(bboxC.ymin * ih)
+                    w = int(bboxC.width * iw)
+                    h = int(bboxC.height * ih)
+                    
+                    # Expand the bounding box slightly for better encoding
+                    padding = int(min(w, h) * 0.2)
+                    top = max(0, y - padding)
+                    right = min(iw, x + w + padding)
+                    bottom = min(ih, y + h + padding)
+                    left = max(0, x - padding)
+                    
+                    face_location = (top, right, bottom, left)
+                    print(f"[DEBUG] MediaPipe detected face at: {face_location}")
+                else:
+                    print("[DEBUG] MediaPipe detected no faces in generate_face_encoding")
+                    return None
+                    
+        except Exception as mp_error:
+            print(f"[WARNING] MediaPipe failed in generate_face_encoding: {mp_error}")
             return None
         
+        # Step 2: Generate face encoding using dlib with known location
         print(f"[DEBUG] Generating face encodings with num_jitters={num_jitters}...")
-        # Get face encodings (use first face if multiple detected)
-        # num_jitters > 1 helps in getting a more stable encoding
-        face_encodings = face_recognition.face_encodings(rgb_image, face_locations, num_jitters=num_jitters)
-        
-        if not face_encodings:
-            print("[WARNING] Face locations found but encoding generation failed")
+        try:
+            face_encodings = face_recognition.face_encodings(rgb_image, known_face_locations=[face_location], num_jitters=num_jitters)
+            
+            if face_encodings:
+                print(f"[SUCCESS] Face encoding generated successfully, shape: {face_encodings[0].shape}")
+                return face_encodings[0]
+            else:
+                print("[DEBUG] face_recognition.face_encodings returned empty")
+                return None
+                
+        except Exception as encoding_error:
+            print(f"[ERROR] Failed to generate encoding with dlib: {encoding_error}")
             return None
-        
-        print(f"[SUCCESS] Face encoding generated successfully, shape: {face_encodings[0].shape}")
-        return face_encodings[0]
         
     except Exception as e:
         print(f"[ERROR] Exception in generate_face_encoding: {type(e).__name__}: {e}")
@@ -198,7 +222,7 @@ def match_face(captured_encoding: np.ndarray,
 
 def detect_face_in_image(image_data: bytes) -> bool:
     """
-    Check if image contains at least one face.
+    Check if image contains at least one face using MediaPipe (primary) or dlib (fallback).
     
     Args:
         image_data: Image bytes
@@ -209,37 +233,53 @@ def detect_face_in_image(image_data: bytes) -> bool:
     try:
         print(f"[DEBUG] detect_face_in_image: Received {len(image_data)} bytes")
         
-        # Use face_recognition's official image loading method
-        # This handles all the image format conversions internally
+        # Use PIL to load the image
+        from PIL import Image as PILImage
         import io
-        import tempfile
         
-        # face_recognition.load_image_file expects a file path or file object
-        # Create a temporary file-like object
-        image_file = io.BytesIO(image_data)
+        pil_image = PILImage.open(io.BytesIO(image_data))
+        print(f"[DEBUG] PIL opened image: mode={pil_image.mode}, size={pil_image.size}")
         
+        # Convert to RGB if needed
+        if pil_image.mode != 'RGB':
+            pil_image = pil_image.convert('RGB')
+        
+        # Convert to numpy array
+        rgb_image = np.array(pil_image, dtype=np.uint8)
+        print(f"[DEBUG] Image array: shape={rgb_image.shape}, dtype={rgb_image.dtype}")
+        
+        # Try MediaPipe first (more compatible)
         try:
-            # Use the official face_recognition image loader
-            rgb_image = face_recognition.load_image_file(image_file)
-            print(f"[DEBUG] face_recognition.load_image_file succeeded: shape={rgb_image.shape}, dtype={rgb_image.dtype}")
-        except Exception as load_error:
-            print(f"[ERROR] face_recognition.load_image_file failed: {load_error}")
-            # Fallback to PIL
-            from PIL import Image as PILImage
-            image_file.seek(0)
-            pil_image = PILImage.open(image_file)
-            print(f"[DEBUG] PIL fallback: mode={pil_image.mode}, size={pil_image.size}")
-            if pil_image.mode != 'RGB':
-                pil_image = pil_image.convert('RGB')
-            rgb_image = np.asarray(pil_image, dtype=np.uint8, order='C')
-            if not rgb_image.flags['C_CONTIGUOUS']:
-                rgb_image = np.ascontiguousarray(rgb_image, dtype=np.uint8)
-        
-        print(f"[DEBUG] Final image - shape: {rgb_image.shape}, dtype: {rgb_image.dtype}, contiguous: {rgb_image.flags['C_CONTIGUOUS']}")
-        
-        face_locations = face_recognition.face_locations(rgb_image)
-        print(f"[DEBUG] detect_face_in_image: Found {len(face_locations)} faces")
-        return len(face_locations) > 0
+            import mediapipe as mp
+            mp_face_detection = mp.solutions.face_detection
+            
+            with mp_face_detection.FaceDetection(
+                model_selection=1,  # 0 for short-range, 1 for full-range
+                min_detection_confidence=0.5
+            ) as face_detection:
+                results = face_detection.process(rgb_image)
+                
+                if results.detections:
+                    print(f"[DEBUG] MediaPipe detected {len(results.detections)} faces")
+                    return True
+                else:
+                    print("[DEBUG] MediaPipe detected no faces")
+                    return False
+                    
+        except Exception as mp_error:
+            print(f"[WARNING] MediaPipe failed: {mp_error}, trying dlib fallback...")
+            
+            # Fallback to dlib/face_recognition
+            try:
+                image_file = io.BytesIO(image_data)
+                image_file.seek(0)
+                loaded_image = face_recognition.load_image_file(image_file)
+                face_locations = face_recognition.face_locations(loaded_image)
+                print(f"[DEBUG] dlib fallback found {len(face_locations)} faces")
+                return len(face_locations) > 0
+            except Exception as dlib_error:
+                print(f"[ERROR] dlib fallback also failed: {dlib_error}")
+                return False
         
     except Exception as e:
         print(f"Error detecting face: {e}")
@@ -258,36 +298,64 @@ def detect_face_with_box(image_data: bytes) -> Optional[Tuple[np.ndarray, Tuple[
         Tuple of (face_encoding, (top, right, bottom, left)) or None if no face
     """
     try:
-        # Use face_recognition's official image loading method
+        # Use PIL to load the image
+        from PIL import Image as PILImage
         import io
-        image_file = io.BytesIO(image_data)
         
+        pil_image = PILImage.open(io.BytesIO(image_data))
+        if pil_image.mode != 'RGB':
+            pil_image = pil_image.convert('RGB')
+        
+        rgb_image = np.array(pil_image, dtype=np.uint8)
+        
+        # Detect face using MediaPipe
+        face_location = None
         try:
-            rgb_image = face_recognition.load_image_file(image_file)
-        except Exception as load_error:
-            from PIL import Image as PILImage
-            image_file.seek(0)
-            pil_image = PILImage.open(image_file)
-            if pil_image.mode != 'RGB':
-                pil_image = pil_image.convert('RGB')
-            rgb_image = np.asarray(pil_image, dtype=np.uint8, order='C')
-            if not rgb_image.flags['C_CONTIGUOUS']:
-                rgb_image = np.ascontiguousarray(rgb_image, dtype=np.uint8)
-        
-        # Detect face locations
-        face_locations = face_recognition.face_locations(rgb_image)
-        
-        if not face_locations:
+            import mediapipe as mp
+            mp_face_detection = mp.solutions.face_detection
+            
+            with mp_face_detection.FaceDetection(
+                model_selection=1,
+                min_detection_confidence=0.5
+            ) as face_detection:
+                results = face_detection.process(rgb_image)
+                
+                if results.detections and len(results.detections) > 0:
+                    detection = results.detections[0]
+                    bboxC = detection.location_data.relative_bounding_box
+                    ih, iw = rgb_image.shape[:2]
+                    
+                    x = int(bboxC.xmin * iw)
+                    y = int(bboxC.ymin * ih)
+                    w = int(bboxC.width * iw)
+                    h = int(bboxC.height * ih)
+                    
+                    padding = int(min(w, h) * 0.2)
+                    top = max(0, y - padding)
+                    right = min(iw, x + w + padding)
+                    bottom = min(ih, y + h + padding)
+                    left = max(0, x - padding)
+                    
+                    face_location = (top, right, bottom, left)
+                else:
+                    return None
+                    
+        except Exception as mp_error:
+            print(f"[WARNING] MediaPipe failed in detect_face_with_box: {mp_error}")
             return None
         
-        # Get face encodings
-        face_encodings = face_recognition.face_encodings(rgb_image, face_locations)
-        
-        if not face_encodings:
+        # Get face encodings using dlib with the MediaPipe-detected location
+        try:
+            face_encodings = face_recognition.face_encodings(rgb_image, known_face_locations=[face_location])
+            
+            if not face_encodings:
+                return None
+            
+            return (face_encodings[0], face_location)
+            
+        except Exception as enc_error:
+            print(f"[ERROR] face_encodings failed: {enc_error}")
             return None
-        
-        # Return first face encoding and location
-        return (face_encodings[0], face_locations[0])
         
     except Exception as e:
         print(f"Error detecting face with box: {e}")

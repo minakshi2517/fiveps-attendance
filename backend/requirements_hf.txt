@@ -14,3 +14,5 @@ face-recognition
 opencv-python-headless
 # Required for Pydantic EmailStr
 email-validator
+# Alternative face detection (more compatible)
+mediapipe
