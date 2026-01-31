@@ -35,19 +35,20 @@ def generate_face_encoding(image_data: bytes, num_jitters: int = 1) -> Optional[
         print(f"[DEBUG] Image decoded successfully, shape: {image.shape}, dtype: {image.dtype}")
         
         # Ensure image is in the correct format (8-bit RGB)
-        # cv2.imdecode with IMREAD_COLOR returns BGR, but we need to handle edge cases
+        # cv2.imdecode with IMREAD_COLOR returns BGR
+        # Use array slicing instead of cv2.cvtColor for better dlib compatibility
         if len(image.shape) == 2:
-            # Grayscale image - convert to RGB
+            # Grayscale image - convert to RGB by stacking
             print("[DEBUG] Converting grayscale to RGB")
-            rgb_image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+            rgb_image = np.stack([image, image, image], axis=2)
         elif image.shape[2] == 4:
-            # RGBA image - convert to RGB
-            print("[DEBUG] Converting RGBA to RGB")
-            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGRA2RGB)
+            # BGRA image - remove alpha and reverse to RGB
+            print("[DEBUG] Converting BGRA to RGB")
+            rgb_image = image[:, :, 2::-1]  # Reverse BGR to RGB, drop alpha
         elif image.shape[2] == 3:
-            # BGR image - convert to RGB
-            print("[DEBUG] Converting BGR to RGB")
-            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            # BGR image - reverse to RGB using array slicing
+            print("[DEBUG] Converting BGR to RGB using array slicing")
+            rgb_image = image[:, :, ::-1].copy()  # Reverse and copy to ensure contiguous
         else:
             print(f"[ERROR] Unexpected image format with {image.shape[2]} channels")
             return None
@@ -239,31 +240,36 @@ def detect_face_in_image(image_data: bytes) -> bool:
                 import io
                 pil_image = PILImage.open(io.BytesIO(image_data))
                 print(f"[DEBUG] PIL opened image: mode={pil_image.mode}, size={pil_image.size}")
-                # Convert PIL to numpy
-                image = np.array(pil_image)
-                print(f"[DEBUG] PIL to numpy: shape={image.shape}, dtype={image.dtype}")
+                # Convert PIL to numpy - PIL images are already in RGB
+                if pil_image.mode == 'RGBA':
+                    pil_image = pil_image.convert('RGB')
+                elif pil_image.mode == 'L':
+                    pil_image = pil_image.convert('RGB')
+                rgb_image = np.array(pil_image, dtype=np.uint8)
+                print(f"[DEBUG] PIL to numpy: shape={rgb_image.shape}, dtype={rgb_image.dtype}")
             except Exception as pil_error:
                 print(f"[ERROR] PIL also failed: {pil_error}")
                 return False
         else:
             print(f"[DEBUG] detect_face_in_image: cv2.imdecode succeeded, shape: {image.shape}, dtype: {image.dtype}")
-        
-        # Handle different image formats
-        if len(image.shape) == 2:
-            # Grayscale
-            print("[DEBUG] detect_face_in_image: Converting grayscale to RGB")
-            rgb_image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
-        elif image.shape[2] == 4:
-            # RGBA
-            print("[DEBUG] detect_face_in_image: Converting RGBA to RGB")
-            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGRA2RGB)
-        elif image.shape[2] == 3:
-            # BGR or RGB
-            print("[DEBUG] detect_face_in_image: Converting BGR to RGB")
-            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        else:
-            print(f"[ERROR] detect_face_in_image: Unexpected image format with {image.shape[2]} channels")
-            return False
+            
+            # cv2.imdecode returns BGR format
+            # Convert BGR to RGB using array slicing (more reliable for dlib than cv2.cvtColor)
+            if len(image.shape) == 2:
+                # Grayscale - convert to RGB by stacking
+                print("[DEBUG] detect_face_in_image: Converting grayscale to RGB")
+                rgb_image = np.stack([image, image, image], axis=2)
+            elif image.shape[2] == 4:
+                # BGRA - remove alpha and reverse to RGB
+                print("[DEBUG] detect_face_in_image: Converting BGRA to RGB")
+                rgb_image = image[:, :, 2::-1]  # Reverse BGR to RGB, drop alpha
+            elif image.shape[2] == 3:
+                # BGR - reverse to RGB using array slicing
+                print("[DEBUG] detect_face_in_image: Converting BGR to RGB using array slicing")
+                rgb_image = image[:, :, ::-1].copy()  # Reverse and copy to ensure contiguous
+            else:
+                print(f"[ERROR] detect_face_in_image: Unexpected image format with {image.shape[2]} channels")
+                return False
         
         # Ensure 8-bit
         if rgb_image.dtype != np.uint8:
@@ -304,13 +310,13 @@ def detect_face_with_box(image_data: bytes) -> Optional[Tuple[np.ndarray, Tuple[
         if image is None:
             return None
         
-        # Handle different image formats
+        # Handle different image formats using array slicing for dlib compatibility
         if len(image.shape) == 2:
-            rgb_image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+            rgb_image = np.stack([image, image, image], axis=2)
         elif image.shape[2] == 4:
-            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGRA2RGB)
+            rgb_image = image[:, :, 2::-1]  # Reverse BGR to RGB, drop alpha
         elif image.shape[2] == 3:
-            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            rgb_image = image[:, :, ::-1].copy()  # Reverse and copy to ensure contiguous
         else:
             return None
         
