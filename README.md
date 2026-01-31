@@ -1,3 +1,13 @@
+---
+title: Face Attendance System
+emoji: 🔍
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # 🎯 Face Recognition Attendance System
 
 A modern, AI-powered attendance management system using advanced face recognition technology with GPS-based location verification. Built with **React + FastAPI + SQLite** featuring a stunning glassmorphism UI design.
