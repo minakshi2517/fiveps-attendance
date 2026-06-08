@@ -162,32 +162,10 @@ async def mark_attendance(
         )
     
     # Verify location
-    is_location_valid, location_name, distance = verify_location(latitude, longitude)
-    
-    if not is_location_valid:
-        # Save rejected attendance record
-        snapshot_path = save_attendance_snapshot(student_id, image_data)
-        
-        attendance = Attendance(
-            student_id=student_id,
-            location_lat=latitude,
-            location_lng=longitude,
-            confidence_score=confidence_score,
-            snapshot_path=snapshot_path,
-            status=AttendanceStatus.REJECTED,
-            rejection_reason=f"Location verification failed. You are {distance:.0f}m away from {location_name}."
-        )
-        
-        db.add(attendance)
-        await db.commit()
-        await db.refresh(attendance)
-        
-        return AttendanceMarkResponse(
-            success=False,
-            message=f"Location verification failed. You are {distance:.0f}m away from {location_name}.",
-            attendance=None,
-            student=None
-        )
+        # Location verification disabled for office-device based attendance
+    is_location_valid = True
+    location_name = "Office"
+    distance = 0
     
     # Check if attendance already marked today
     today = date.today()
