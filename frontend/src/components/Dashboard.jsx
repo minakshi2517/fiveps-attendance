@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { StatsCard, GlassCard, GradientButton } from './ui';
 import WebcamCapture from './WebcamCapture';
-import LocationMap from './LocationMap';
+
 import AttendanceStatus from './AttendanceStatus';
 import StudentRegistration from './StudentRegistration';
 import AdminPanel from './AdminPanel';
@@ -32,7 +32,7 @@ export default function Dashboard({ onBack }) {
     const [showAdminLogin, setShowAdminLogin] = useState(false);
     const [detectionData, setDetectionData] = useState(null);
 
-    const { location, error: locationError, loading: locationLoading } = useGeolocation();
+    
     const { isConnected, lastMessage } = useWebSocket();
     const { isAuthenticated } = useAuth();
 
@@ -67,13 +67,7 @@ export default function Dashboard({ onBack }) {
     };
 
     const handleCapture = async (imageBlob) => {
-        if (!location) {
-            setAttendanceResult({
-                success: false,
-                message: 'Location not available. Please enable location services.',
-            });
-            return;
-        }
+        
 
         setIsProcessing(true);
         setAttendanceResult(null);
@@ -81,9 +75,7 @@ export default function Dashboard({ onBack }) {
         try {
             const formData = new FormData();
             formData.append('image', imageBlob, 'attendance.jpg');
-            formData.append('latitude', location.latitude);
-            formData.append('longitude', location.longitude);
-
+           
             const result = await attendanceAPI.mark(formData);
             setAttendanceResult(result);
             setStudentData(result.student);
@@ -273,7 +265,7 @@ export default function Dashboard({ onBack }) {
                         <AttendanceStatus
                             result={attendanceResult}
                             student={studentData}
-                            deviceLocation={location}
+                        
                         />
                     </motion.div>
                 </motion.div>
@@ -284,9 +276,9 @@ export default function Dashboard({ onBack }) {
                     initial="initial"
                     animate="animate"
                 >
-                    <motion.div className="lg:col-span-2" variants={staggerItem}>
+                    {/* <motion.div className="lg:col-span-2" variants={staggerItem}>
                         <LocationMap userLocation={location} locationError={locationError} />
-                    </motion.div>
+                    </motion.div> */}
 
                     {/* Today's Attendance List */}
                     <motion.div variants={staggerItem}>
