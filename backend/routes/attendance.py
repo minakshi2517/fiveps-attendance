@@ -93,8 +93,8 @@ async def recognize_face(
 @router.post("/mark", response_model=AttendanceMarkResponse)
 async def mark_attendance(
     image: UploadFile = File(...),
-    latitude: float = Form(...),
-    longitude: float = Form(...),
+    latitude: float = Form(0),
+    longitude: float = Form(0),
     db: AsyncSession = Depends(get_db)
 ):
     """
