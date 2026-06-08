@@ -8,7 +8,7 @@ from database import get_db
 from models import Student, Attendance, AttendanceStatus
 from schemas import AttendanceResponse, AttendanceMarkResponse, StudentResponse
 from utils.face_recognition import generate_face_encoding, load_all_face_encodings, match_face
-from utils.location import verify_location, get_location_info
+# from utils.location import verify_location, get_location_info
 from utils.storage import save_attendance_snapshot
 from config import FACE_CONFIDENCE_THRESHOLD
 
@@ -17,8 +17,8 @@ router = APIRouter(prefix="/api/attendance", tags=["attendance"])
 @router.post("/recognize")
 async def recognize_face(
     image: UploadFile = File(...),
-    latitude: float = Form(None),
-    longitude: float = Form(None),
+    # latitude: float = Form(None),
+    # longitude: float = Form(None),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -93,8 +93,8 @@ async def recognize_face(
 @router.post("/mark", response_model=AttendanceMarkResponse)
 async def mark_attendance(
     image: UploadFile = File(...),
-    latitude: float = Form(0),
-    longitude: float = Form(0),
+    # latitude: float = Form(0),
+    # longitude: float = Form(0),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -161,11 +161,11 @@ async def mark_attendance(
             student=None
         )
     
-    # Verify location
-        # Location verification disabled for office-device based attendance
-    is_location_valid = True
-    location_name = "Office"
-    distance = 0
+    # # Verify location
+    #     # Location verification disabled for office-device based attendance
+    # is_location_valid = True
+    # location_name = "Office"
+    # distance = 0
     
     # Check if attendance already marked today
     today = date.today()
@@ -194,8 +194,7 @@ async def mark_attendance(
     # Create verified attendance record
     attendance = Attendance(
         student_id=student_id,
-        location_lat=latitude,
-        location_lng=longitude,
+       
         confidence_score=confidence_score,
         snapshot_path=snapshot_path,
         status=AttendanceStatus.VERIFIED
@@ -247,8 +246,8 @@ async def get_today_attendance(
                 student_id=attendance.student_id,
                 student_name=student.name,
                 timestamp=attendance.timestamp,
-                location_lat=attendance.location_lat,
-                location_lng=attendance.location_lng,
+                # location_lat=attendance.location_lat,
+                # location_lng=attendance.location_lng,
                 confidence_score=attendance.confidence_score,
                 status=attendance.status,
                 rejection_reason=attendance.rejection_reason,
@@ -283,8 +282,8 @@ async def get_student_attendance(
                 student_id=attendance.student_id,
                 student_name=student.name,
                 timestamp=attendance.timestamp,
-                location_lat=attendance.location_lat,
-                location_lng=attendance.location_lng,
+                # location_lat=attendance.location_lat,
+                # location_lng=attendance.location_lng,
                 confidence_score=attendance.confidence_score,
                 status=attendance.status,
                 rejection_reason=attendance.rejection_reason,
