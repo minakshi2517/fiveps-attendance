@@ -70,8 +70,8 @@ export default function WebcamCapture({ onCapture, isProcessing, detectionData }
 
                 const formData = new FormData();
                 formData.append('image', blob, 'frame.jpg');
-                formData.append('latitude', '31.248');
-                formData.append('longitude', '75.708');
+                formData.append('latitude', '0');
+                formData.append('longitude', '0');
 
                 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
                 const result = await fetch(`${API_URL}/api/attendance/recognize`, {
